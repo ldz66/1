@@ -1,0 +1,73 @@
+#include "OSAL.h"
+#include "AF.h"
+#include "ZDApp.h"
+#include "ZDObject.h"
+#include "ZDProfile.h"
+#include <string.h>
+#include "Coordinator.h"
+#include "DebugTrace.h"
+
+#if !defined( WIN32 )
+#include "OnBoard.h"
+#endif
+
+/* HAL */
+#include "hal_lcd.h"
+#include "hal_led.h"
+#include "hal_key.h"
+#include "hal_uart.h"
+
+const cId_t GenericApp_ClusterList[GENERICAPP_MAX_CLUSTERS] =
+{
+    GENERICAPP_CLUSTERID
+};
+//下面代码的常量都是以宏定义形式实现的
+const SimpleDescriptionFormat_t GenericApp_SimpleDesc =
+{
+    GENERICAPP_ENDPOINT,              //  int Endpoint;
+    GENERICAPP_PROFID,                //  uint16 AppProfId[2];
+    GENERICAPP_DEVICEID,              //  uint16 AppDeviceId[2];
+    GENERICAPP_DEVICE_VERSION,        //  int   AppDevVer:4;
+    GENERICAPP_FLAGS,                 //  int   AppFlags:4;
+    GENERICAPP_MAX_CLUSTERS,          //  byte  AppNumInClusters;
+    (cId_t *)GenericApp_ClusterList,  //  byte *pAppInClusterList;
+    0,         
+    (cId_t *)NULL   
+};//上述数据结构可以用来描述一个zigbee设备节点
+
+endPointDesc_t GenericApp_epDesc;
+byte GenericApp_TaskID;
+byte GenericApp_TransID;
+
+void GenericApp_MessageMSGCB( afIncomingMSGPacket_t *pckt );
+void GenericApp_SendTheMessage( void );
+
+void GenericApp_Init( byte task_id )//下列代码是任务初始化函数
+{
+    GenericApp_TaskID = task_id; //初始化了任务优先级
+    GenericApp_TransID = 0; //NTM7
+    GenericApp_epDesc.endPoint = GENERICAPP_ENDPOINT;//对节点描述符进行的初始化
+    GenericApp_epDesc.task_id = &GenericApp_TaskID;//对节点描述符进行的初始化
+    GenericApp_epDesc.simpleDesc                   //对节点描述符进行的初始化
+        = (SimpleDescriptionFormat_t *)&GenericApp_SimpleDesc;//对节点描述符进行的初始化
+    GenericApp_epDesc.latencyReq = noLatencyReqs;//对节点描述符进行的初始化
+    afRegister( &GenericApp_epDesc );//使用afRegister函数将节点描述进行注册
+    
+}
+
+void GenericApp_SendTheMessage( void )
+{
+    unsigned char theMessageData[4] = "LED";  //定义一个数组，实现数据发送
+    afAddrType_t my_DstAddr;  //定义变量
+    my_DstAddr.addrMode = (afAddrMode_t)Addr16Bit;//将发送地址模式设置为单播
+    my_DstAddr.endPoint = GENERICAPP_ENDPOINT;  // 初始化端口号
+    my_DstAddr.addr.shortAddr = 0x0000;  //0x0000为协调器网络地址，在ZigBee网络中是固定的
+    AF_DataRequest( &my_DstAddr, &GenericApp_epDesc,  //调用数据发送函数AF_DataRequest进行无线数据的发送
+                   GENERICAPP_CLUSTERID,
+                   3,
+                   theMessageData,
+                   &GenericApp_TransID,
+                   AF_DISCV_ROUTE,
+                   AF_DEFAULT_RADIUS );
+    HalLedBlink(HAL_LED_2,0,50,500);  //调用函数，使终端节点的LED2闪烁
+}
